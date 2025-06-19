@@ -1,12 +1,13 @@
 #include "quiztaker.h"
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QInputDialog>
-#include <random>
-#include <QTimer>
 #include <QHeaderView>
+#include <QComboBox>
+#include <random>
 
 QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
     : QWidget(parent), currentQuestionIndex(0), score(0)
@@ -26,20 +27,12 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
 
     submitButton = new QPushButton("Ответить", this);
     layout->addWidget(submitButton);
-
     connect(submitButton, &QPushButton::clicked, this, &QuizTaker::submitAnswer);
 
-
-    scoreTable = new QTableWidget(this);
-    scoreTable->setColumnCount(2);
-    scoreTable->setHorizontalHeaderLabels({"ФИО", "Баллы"});
-    scoreTable->horizontalHeader()->setStretchLastSection(true);
-    scoreTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    scoreTable->setSelectionMode(QAbstractItemView::NoSelection);
-    scoreTable->setFixedHeight(200);
-    layout->addWidget(scoreTable);
+    initScoreTable();
 
     QFile file(fileName);
+    quizFileName = QFileInfo(fileName).fileName();
     if (file.open(QIODevice::ReadOnly)) {
         QByteArray data = file.readAll();
         QJsonDocument doc = QJsonDocument::fromJson(data);
@@ -47,7 +40,6 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
     } else {
         QMessageBox::critical(this, "Ошибка", "Не удалось открыть викторину.");
     }
-
 
     this->setStyleSheet(R"(
     QWidget {
@@ -77,8 +69,7 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
     }
     QPushButton:hover {
         background-color: #ff8fb6;
-    }
-)");
+    })");
 
     loadQuestion();
 
@@ -86,14 +77,13 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
     for (const QJsonValue &val : quizData) {
         int difficulty = val.toObject().value("difficulty").toInt(1);
         switch (difficulty) {
-        case 1: totalSeconds += 30; break;
-        case 2: totalSeconds += 60; break;
+        case 1: totalSeconds += 20; break;
+        case 2: totalSeconds += 35; break;
         case 3: totalSeconds += 90; break;
-        default: totalSeconds += 60;
+        default: totalSeconds += 35;
         }
     }
     remainingTime = QTime(0, 0).addSecs(totalSeconds);
-
 
     timerLabel = new QLabel(this);
     timerLabel->setText(remainingTime.toString("mm:ss"));
@@ -103,10 +93,9 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
     connect(quizTimer, &QTimer::timeout, this, &QuizTaker::updateTimer);
     quizTimer->start(1000);
 
-    loadScoresToTable();
     auto *btnRow = new QHBoxLayout;
     againButton = new QPushButton("Пройти снова", this);
-    exitButton  = new QPushButton("Выход",        this);
+    exitButton  = new QPushButton("Выход", this);
     btnRow->addWidget(againButton);
     btnRow->addWidget(exitButton);
     layout->addLayout(btnRow);
@@ -116,7 +105,18 @@ QuizTaker::QuizTaker(const QString &fileName, QWidget *parent)
 
     connect(againButton, &QPushButton::clicked, this, &QuizTaker::restartQuiz);
     connect(exitButton , &QPushButton::clicked, this, &QWidget::close);
+}
 
+void QuizTaker::initScoreTable()
+{
+    scoreTable = new QTableWidget(this);
+    scoreTable->setColumnCount(2);
+    scoreTable->setHorizontalHeaderLabels({"ФИО", "Баллы"});
+    scoreTable->horizontalHeader()->setStretchLastSection(true);
+    scoreTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    scoreTable->setSelectionMode(QAbstractItemView::NoSelection);
+    scoreTable->setFixedHeight(200);
+    scoreTable->hide();
 }
 
 void QuizTaker::loadQuestion()
@@ -159,9 +159,8 @@ void QuizTaker::submitAnswer()
 {
     QSet<QString> selectedAnswers;
     for (int i = 0; i < 4; ++i) {
-        if (optionBoxes[i]->isChecked()) {
+        if (optionBoxes[i]->isChecked())
             selectedAnswers.insert(optionBoxes[i]->text());
-        }
     }
 
     if (selectedAnswers.isEmpty()) {
@@ -179,6 +178,15 @@ void QuizTaker::submitAnswer()
     loadQuestion();
 }
 
+void QuizTaker::updateTimer()
+{
+    remainingTime = remainingTime.addSecs(-1);
+    timerLabel->setText(remainingTime.toString("mm:ss"));
+
+    if (remainingTime == QTime(0, 0, 0))
+        timeIsUp();
+}
+
 void QuizTaker::timeIsUp()
 {
     quizTimer->stop();
@@ -186,28 +194,14 @@ void QuizTaker::timeIsUp()
     finishQuiz(true);
 }
 
-
-void QuizTaker::updateTimer()
+void QuizTaker::finishQuiz(bool)
 {
-    remainingTime = remainingTime.addSecs(-1);
-    timerLabel->setText(remainingTime.toString("mm:ss"));
-
-    if (remainingTime == QTime(0, 0, 0)) {
-        timeIsUp();
-    }
-}
-
-void QuizTaker::finishQuiz(bool timeUp)
-{
-     quizTimer->stop();
-    QMessageBox::information(this,"Результат",
+    quizTimer->stop();
+    QMessageBox::information(this, "Результат",
                              QString("Вы набрали %1 балл(ов).").arg(score));
-    if (score>0) askForNameAndSaveScore();
+    askForNameAndSaveScore();
     showScoreTableOnly();
 }
-
-
-
 
 void QuizTaker::askForNameAndSaveScore()
 {
@@ -230,6 +224,7 @@ void QuizTaker::askForNameAndSaveScore()
         QJsonObject newRecord;
         newRecord["name"] = name.trimmed();
         newRecord["score"] = score;
+        newRecord["quiz"] = quizFileName;
 
         scoresArray.append(newRecord);
 
@@ -238,25 +233,26 @@ void QuizTaker::askForNameAndSaveScore()
             file.write(doc.toJson());
             file.close();
         }
-        loadScoresToTable();
     }
 }
 
-void QuizTaker::loadScoresToTable()
+void QuizTaker::loadScoresToTable(const QString &filter)
 {
     QFile file("scores.json");
     if (!file.open(QIODevice::ReadOnly)) {
         scoreTable->setRowCount(0);
         return;
     }
-    QByteArray data = file.readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    QJsonArray scoresArray = doc.array();
 
+    QJsonArray scoresArray = QJsonDocument::fromJson(file.readAll()).array();
     QList<QJsonObject> records;
-    for (const auto& val : scoresArray) {
-        records.append(val.toObject());
+
+    for (const QJsonValue &val : scoresArray) {
+        QJsonObject obj = val.toObject();
+        if (filter == "Все викторины" || obj["quiz"].toString() == filter)
+            records.append(obj);
     }
+
     std::sort(records.begin(), records.end(), [](const QJsonObject &a, const QJsonObject &b) {
         return a["score"].toInt() > b["score"].toInt();
     });
@@ -268,71 +264,104 @@ void QuizTaker::loadScoresToTable()
     }
 }
 
-
-
-void QuizTaker::showScoreTableOnly() {
+void QuizTaker::showScoreTableOnly()
+{
     questionLabel->hide();
     for (int i = 0; i < 4; ++i)
         optionBoxes[i]->hide();
     submitButton->hide();
     timerLabel->hide();
 
-    scoreTable->clearContents();
-    QFile file("scores.json");
-    if (!file.open(QIODevice::ReadOnly)) return;
+    loadScoresToTable("Все викторины");
 
-    QByteArray data = file.readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    QJsonArray scoresArray = doc.array();
+    layout->addWidget(scoreTable);
+    scoreTable->show();
 
-    QList<QJsonObject> records;
-    for (const auto& val : scoresArray)
-        records.append(val.toObject());
+    againButton->show();
+    exitButton->show();
 
-    std::sort(records.begin(), records.end(), [](const QJsonObject &a, const QJsonObject &b) {
-        return a["score"].toInt() > b["score"].toInt();
-    });
-
-    scoreTable->setRowCount(records.size());
-    for (int i = 0; i < records.size(); ++i) {
-        scoreTable->setItem(i, 0, new QTableWidgetItem(records[i]["name"].toString()));
-        scoreTable->setItem(i, 1, new QTableWidgetItem(QString::number(records[i]["score"].toInt())));
+    if (filterLayout) {
+        QLayoutItem *child;
+        while ((child = filterLayout->takeAt(0)) != nullptr) {
+            delete child->widget();
+            delete child;
+        }
+        layout->removeItem(filterLayout);
+        delete filterLayout;
+        filterLayout = nullptr;
     }
 
-    scoreTable->show();
-    againButton->show();
-    exitButton ->show();
+    if (!filterAdded) {
+        filterLayout = new QHBoxLayout;
+        QLabel *filterLabel = new QLabel("Фильтр по викторине:", this);
+        QComboBox *filterBox = new QComboBox(this);
+        filterBox->addItem("Все викторины");
 
+        QFile file("scores.json");
+        if (file.open(QIODevice::ReadOnly)) {
+            QJsonArray arr = QJsonDocument::fromJson(file.readAll()).array();
+            QSet<QString> quizSet;
+            for (const QJsonValue &v : arr)
+                quizSet.insert(v.toObject()["quiz"].toString());
+            for (const QString &quiz : quizSet)
+                filterBox->addItem(quiz);
+        }
+
+        connect(filterBox, &QComboBox::currentTextChanged, this, [=](const QString &quizName) {
+            loadScoresToTable(quizName);
+        });
+
+        filterLayout->addWidget(filterLabel);
+        filterLayout->addWidget(filterBox);
+        layout->insertLayout(layout->indexOf(scoreTable), filterLayout);
+        filterAdded = true;
+    }
 }
 
 void QuizTaker::restartQuiz()
 {
+    filterAdded = false;
     currentQuestionIndex = 0;
     score = 0;
 
+    if (filterLayout) {
+        QLayoutItem *child;
+        while ((child = filterLayout->takeAt(0)) != nullptr) {
+            delete child->widget();
+            delete child;
+        }
+        layout->removeItem(filterLayout);
+        delete filterLayout;
+        filterLayout = nullptr;
+    }
+
+    if (scoreTable && scoreTable->parent() == this) {
+        layout->removeWidget(scoreTable);
+        scoreTable->hide();
+    }
+
     questionLabel->show();
-    for (int i = 0; i < 4; ++i) optionBoxes[i]->show();
-    submitButton   ->show();
-    timerLabel     ->show();
-    againButton    ->hide();
-    exitButton     ->hide();
-    scoreTable     ->hide();
+    for (int i = 0; i < 4; ++i)
+        optionBoxes[i]->show();
+
+    submitButton->show();
+    timerLabel->show();
+    againButton->hide();
+    exitButton->hide();
 
     int totalSeconds = 0;
     for (const QJsonValue &val : quizData) {
         int difficulty = val.toObject().value("difficulty").toInt(1);
         switch (difficulty) {
-        case 1: totalSeconds += 30; break;
-        case 2: totalSeconds += 60; break;
+        case 1: totalSeconds += 20; break;
+        case 2: totalSeconds += 35; break;
         case 3: totalSeconds += 90; break;
-        default: totalSeconds += 60;
+        default: totalSeconds += 35;
         }
     }
     remainingTime = QTime(0, 0).addSecs(totalSeconds);
-    timerLabel->setText(remainingTime.toString("mm:ss"));
     timerLabel->setText(remainingTime.toString("mm:ss"));
     quizTimer->start(1000);
 
     loadQuestion();
 }
-

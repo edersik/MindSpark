@@ -12,10 +12,9 @@
 #include <QTime>
 #include <QTableWidget>
 #include <QHBoxLayout>
+#include <QComboBox>
 
-
-class QuizTaker : public QWidget
-{
+class QuizTaker : public QWidget {
     Q_OBJECT
 
 public:
@@ -31,10 +30,12 @@ private:
     void loadQuestion();
     void finishQuiz(bool timeUp = false);
     void askForNameAndSaveScore();
-    void loadScoresToTable();
+    void loadScoresToTable(const QString &filter = "Все викторины");
     void initScoreTable();
     void showScoreTableOnly();
+    bool filterAdded = false;
 
+    QHBoxLayout* filterLayout = nullptr;
     QTableWidget *scoreTable;
     QPushButton  *againButton;
     QPushButton  *exitButton;
@@ -54,6 +55,7 @@ private:
     QTime remainingTime;
     QLabel *timerLabel;
 
+    QString quizFileName;
 };
 
 #endif // QUIZTAKER_H

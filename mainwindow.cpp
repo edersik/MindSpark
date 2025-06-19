@@ -86,7 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
 
     QLabel *label = new QLabel(this);
-    QPixmap pixmap(":/cat.jpg");
+    QPixmap pixmap(":/capibara.jpg");
     label->setPixmap(pixmap.scaled(400, 300, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     label->setAlignment(Qt::AlignCenter);
 
