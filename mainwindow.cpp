@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include "quizeditor.h"
 #include "quizviewer.h"
+#include "quiztaker.h"
 
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -10,6 +11,10 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QStringList>
 
 void MainWindow::onCreateQuiz() {
     auto *editor = new QuizEditor(nullptr);
@@ -18,7 +23,6 @@ void MainWindow::onCreateQuiz() {
     editor->resize(400, 600);
     editor->show();
 }
-
 
 void MainWindow::onOpenQuiz()
 {
@@ -29,38 +33,25 @@ void MainWindow::onOpenQuiz()
     QMessageBox msgBox;
     msgBox.setWindowTitle("Выберите действие");
     msgBox.setText("Что вы хотите сделать с викториной?");
-    QPushButton *viewButton = msgBox.addButton("📖 Посмотреть", QMessageBox::ActionRole);
+    QPushButton *viewButton = msgBox.addButton("📖 Посмотреть и редактировать", QMessageBox::ActionRole);
     QPushButton *takeButton = msgBox.addButton("🏁 Пройти", QMessageBox::ActionRole);
-    QPushButton *cancelButton = msgBox.addButton(QMessageBox::Cancel);
+    QPushButton *exitButton = msgBox.addButton("🚪 Выход", QMessageBox::RejectRole);
 
     msgBox.exec();
 
     if (msgBox.clickedButton() == viewButton) {
-        QuizEditor *viewer = new QuizEditor();
-        QFile file(fileName);
-        if (file.open(QIODevice::ReadOnly)) {
-            QByteArray data = file.readAll();
-            QJsonDocument doc = QJsonDocument::fromJson(data);
-            QJsonArray array = doc.array();
-
-            for (const QJsonValue &val : array) {
-                QString question = val.toObject()["question"].toString();
-                QString correct = val.toObject()["correct"].toString();
-                viewer->getQuestionList()->addItem(QString("✓ %1\n  ➤ %2").arg(question, correct));
-            }
-        }
-        viewer->setWindowTitle("Просмотр викторины");
+        auto *viewer = new QuizViewer(fileName, this);
+        viewer->setWindowTitle("Просмотр и редактирование викторины");
+        viewer->resize(600, 700);
         viewer->show();
     }
     else if (msgBox.clickedButton() == takeButton) {
-        QuizTaker *taker = new QuizTaker(fileName);
+        auto *taker = new QuizTaker(fileName);
         taker->setWindowTitle("Прохождение викторины");
+        taker->resize(800, 600);
         taker->show();
     }
-    else {
-    }
 }
-
 
 void MainWindow::onAbout() {
     QMessageBox::about(this, "О программе", "Милое приложение для викторин\nКурсовая работа Ерофеевой Дарьи Денисовны и Новиковой Дарьи Дмитриевны 🐾");
